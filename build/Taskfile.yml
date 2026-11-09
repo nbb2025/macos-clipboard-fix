@@ -1,0 +1,33 @@
+version: '3'
+tasks:
+  go:mod:tidy:
+    run: once
+    cmds:
+      - go mod tidy
+  install:frontend:deps:
+    run: once
+    dir: frontend
+    sources: [package.json, package-lock.json]
+    generates: [node_modules/.package-lock.json]
+    cmds:
+      - npm ci
+  generate:bindings:
+    run: once
+    deps: [go:mod:tidy]
+    cmds:
+      - wails3 generate bindings -f '{{.BUILD_FLAGS}}' -clean=true -ts -i
+  generate:icons:
+    run: once
+    deps: [install:frontend:deps]
+    cmds:
+      - npm run icons --prefix frontend
+      - wails3 generate icons -input build/appicon.png -macfilename build/darwin/icons.icns -windowsfilename ''
+  build:frontend:
+    run: once
+    deps: [install:frontend:deps, generate:bindings]
+    cmds:
+      - npm run {{if eq .DEV "true"}}build:dev{{else}}build{{end}} --prefix frontend
+  dev:frontend:
+    dir: frontend
+    cmds:
+      - npm run dev -- --port {{.VITE_PORT}}

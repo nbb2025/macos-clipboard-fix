@@ -1,0 +1,81 @@
+name: macOS build and release
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: macos-${{ github.ref }}
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
+
+jobs:
+  build:
+    runs-on: macos-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: '1.26.10'
+          cache: true
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Install Wails
+        run: go install github.com/wailsapp/wails/v3/cmd/wails3@v3.0.0
+      - name: Build Universal application
+        run: wails3 task package:universal
+      - name: Test and vet
+        run: |
+          go test -race ./...
+          go vet ./...
+      - name: Package and verify
+        run: bash scripts/package-macos.sh
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: Clipboard-Fix-universal
+          path: |
+            dist/*.zip
+            dist/*.dmg
+            dist/SHA256SUMS
+          if-no-files-found: error
+          retention-days: 14
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/') && github.event_name == 'push'
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: Clipboard-Fix-universal
+          path: dist
+      - uses: softprops/action-gh-release@8a0cd651e5b2365bd640854a3fa5dfc70e4875f3 # v3.0.4
+        with:
+          name: Clipboard Fix ${{ github.ref_name }}
+          fail_on_unmatched_files: true
+          files: |
+            dist/*.zip
+            dist/*.dmg
+            dist/SHA256SUMS
+          body: |
+            中文 macOS 通用剪贴板诊断与修复 GUI，使用 Go + Wails 3。
+
+            - 接力、Wi-Fi、蓝牙、附近连接和系统服务诊断
+            - 发送/接收缓存备份、重建与恢复
+            - 新测试文字核对、跨设备结果记录、隐私摘要导出
+            - Apple Silicon + Intel Universal 应用，最低构建系统版本 macOS 12
+
+            下载 DMG 或 ZIP，将 Clipboard Fix.app 放入应用程序。
+            发布包经过本地 ad-hoc 签名，尚无 Apple Developer ID 签名和公证。
+            SHA256SUMS 提供下载校验值。修复后需在另一台设备实际粘贴确认。
