@@ -479,7 +479,7 @@ export default function App() {
             <span>在你的 Mac 上本地运行</span>
           </div>
           <small>
-            版本 0.1.0 <span>Go + Wails</span>
+            版本 0.1.0
           </small>
         </div>
       </aside>
